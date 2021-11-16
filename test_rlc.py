@@ -1,6 +1,6 @@
 """Test by using RLC sircuit simulation"""
 import cmath
-#import extrapolator
+import extrapolator
 
 NUM_DERIVS = 4
 
@@ -68,6 +68,9 @@ def find_ab_test(euler_omega, euler_phi = None):
             '' if euler_phi is None else ', Euler phi: %s'%fmt_complex(euler_phi) )
     print(20*'-')
 
+    approx_in = extrapolator.approximator()
+    approx_clog = extrapolator.approximator()
+
     for t in range(24):
         t /= 6
         if euler_phi is None:
@@ -116,30 +119,30 @@ def find_ab_test(euler_omega, euler_phi = None):
 #        ref_val = -2 * euler_omega.imag ** 3 * (cmath.sin(ref_angle) / cmath.cos(ref_angle) ** 3).real
 #        print('    real-second of ratio {0:.3f} - {1:.3f} check {2}'.format(ref_val, our_val, compare_result(ref_val - our_val)))
 
-        # Ratio between second and first above
-        our_val = (
-                derivs[3].real / derivs[0].real
-                - 3 * derivs[2].real * derivs[1].real / derivs[0].real ** 2
-                + 2 * derivs[1].real ** 3 / derivs[0].real ** 3
-            )
-        our_val /= derivs[2].real / derivs[0].real - derivs[1].real ** 2 / derivs[0].real ** 2
-        # Reference val:
-        ref_val = 2 * euler_omega.imag * cmath.tan(ref_angle).real
-        print('      ratio {0:.3f} - {1:.3f} check {2}'.format(ref_val, our_val, compare_result(ref_val - our_val)))
-        #assert abs(our_val - ref_val) < 1e-10, f'{our_val - ref_val=}'
-
-        must_be_a = derivs[1].real/derivs[0].real + our_val/2
-        print(f'        {must_be_a=:.3f}', compare_result(must_be_a - euler_omega.real))
-        print()
-
-        # Simplify the expression (to avoid division by zero)
-        logd_deriv_logd_val = (
-                derivs[3].real * derivs[0].real ** 2
-                -3 * derivs[2].real * derivs[1].real * derivs[0].real
-                +2 * derivs[1].real ** 3
-            )
-        logd_deriv_logd_val /= derivs[0].real * (derivs[2].real * derivs[0].real - derivs[1].real ** 2)
-        print('      logd_deriv_logd_val {0:.3f} - {1:.3f}'.format(logd_deriv_logd_val, ref_val), compare_result(logd_deriv_logd_val - ref_val))
+#        # Ratio between second and first above
+#        our_val = (
+#                derivs[3].real / derivs[0].real
+#                - 3 * derivs[2].real * derivs[1].real / derivs[0].real ** 2
+#                + 2 * derivs[1].real ** 3 / derivs[0].real ** 3
+#            )
+#        our_val /= derivs[2].real / derivs[0].real - derivs[1].real ** 2 / derivs[0].real ** 2
+#        # Reference val:
+#        ref_val = 2 * euler_omega.imag * cmath.tan(ref_angle).real
+#        print('      ratio {0:.3f} - {1:.3f} check {2}'.format(ref_val, our_val, compare_result(ref_val - our_val)))
+#        #assert abs(our_val - ref_val) < 1e-10, f'{our_val - ref_val=}'
+#
+#        must_be_a = derivs[1].real/derivs[0].real + our_val/2
+#        print(f'        {must_be_a=:.3f}', compare_result(must_be_a - euler_omega.real))
+#        print()
+#
+#        # Simplify the expression (to avoid division by zero)
+#        logd_deriv_logd_val = (
+#                derivs[3].real * derivs[0].real ** 2
+#                -3 * derivs[2].real * derivs[1].real * derivs[0].real
+#                +2 * derivs[1].real ** 3
+#            )
+#        logd_deriv_logd_val /= derivs[0].real * (derivs[2].real * derivs[0].real - derivs[1].real ** 2)
+#        print('      logd_deriv_logd_val {0:.3f} - {1:.3f}'.format(logd_deriv_logd_val, ref_val), compare_result(logd_deriv_logd_val - ref_val))
 
         #
         # Find a - Real component of Euler's omega (inverted time-constant)
@@ -177,10 +180,36 @@ def find_ab_test(euler_omega, euler_phi = None):
         assert -1e-13 < must_be_imag -  func.imag < 1e-13
         print()
 
+        #
+        # Test the derivatives calculated by extrapolator.approximate()
+        #
+        approx_in.approximate(func.real, t)
+        print('Approximated derivs:')
+        min_dif = cmath.inf, 0
+        for _, tmp_t in approx_in:
+            print(f'  at t={tmp_t}:')
+            tmp_obj = approx_in.copy()
+            tmp_obj.make_derivs(tmp_t)
+            approx_derivs = []
+            for rank in range(tmp_obj.num_deltas()):
+                approx = tmp_obj.get_value(rank, as_deriv=True)
+                actual = euler_full_derivative(euler_omega, euler_phi, tmp_t, rank).real
+                print(f'    {approx:8.3f}, actual {actual:8.3f}')
+                approx_derivs.append(approx)
+            if len(approx_derivs) >= CALC_EULER_IMAG_DERIVS:
+                approx_imag = calc_euler_imag(approx_derivs)
+                actual = euler_full_formula(euler_omega, euler_phi, tmp_t).imag
+                print(f'  * imag val: {approx_imag:8.3f}, actual {actual:8.3f}', compare_result(approx_imag - actual))
+                diff = abs((approx_imag - actual) / actual)
+                if min_dif[0] > diff:
+                    min_dif = diff, tmp_t
+        print(f'* done, diff {min_dif[0]*100:.1f}% at t={min_dif[1]} (behind {t - min_dif[1]})')
+        print('='*10)
+
     return 0
 
 def test_rlc():
-    find_ab_test(complex(cmath.pi / 3, cmath.pi), complex(2, -1))
+    find_ab_test(complex(-cmath.pi / 6, cmath.pi), complex(2, -1))
 
 if __name__ == '__main__':
     if test_rlc():
