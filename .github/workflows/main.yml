@@ -18,7 +18,6 @@ env:
   SRC_REF: ''
   DST_REF: ${{ github.event.inputs.DST_REF }}
   NOTEBOOK_FLT: '-Recurse *.ipynb'
-  PIP_MODULES: 'jupyter matplotlib'
   MASTER_BRANCH: 'refs/heads/master'
   GENERATED_BRANCH: 'generated'
   GENERATED_BRANCH_OLD: 'generated-old'
@@ -44,20 +43,20 @@ jobs:
         echo "DST_REF=$DST_REF" >> ${env:GITHUB_ENV}
         echo "DST_REF set to $DST_REF"
 
-    - name: Set up Python 3.9
+    - name: Set up Python 3.10
       uses: actions/setup-python@v2
       with:
-        python-version: 3.9
+        python-version: '3.10'
 
     - name: Install Jupyter
       run: |
-        pip install ${{ env.PIP_MODULES }}
+        pip install -r requirements.txt
 
     - name: Execute Jupyter notebooks
       run: |
         foreach ($file in Get-ChildItem ${{ env.NOTEBOOK_FLT }}) {
           echo "Processing $($file.Name)..."
-          jupyter nbconvert --to notebook --execute $file --output=$file
+          jupyter nbconvert --to notebook --inplace --execute $file
           if ($LASTEXITCODE) {exit $LASTEXITCODE}
 
           git add $file

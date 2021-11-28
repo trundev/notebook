@@ -11,4 +11,4 @@ Jupyter notebook playground.
 
 Work in progress _(with "generated" output on nbviewer.org)_:
 
-- [RLC circuit model](https://nbviewer.org/github/trundev/notebook/tree/generated/rlc_circuit.ipynb) ([original](rlc_circuit.ipynb)) - Model of resistor-inductor capacitor-electronic circuit
+- [RLC circuit model](https://nbviewer.org/github/trundev/notebook/tree/generated/rlc_circuit.ipynb) ([original](rlc_circuit.ipynb)) - Model of resistor-inductor-capacitor electronic circuit
