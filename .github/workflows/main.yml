@@ -11,12 +11,17 @@ on:
         description: "Tag to be created at the result commit"
         required: false
         default: ""
+      RENDERER:
+        description: "Plotly defaults renderer"
+        required: false
+        default: "notebook+plotly_mimetype+png"
   push:
     branches: [ master, '**-test' ]
 
 env:
   SRC_REF: ''
-  DST_REF: ${{ github.event.inputs.DST_REF }}
+  DST_REF: ''
+  PLOTLY_RENDERER: 'plotly_mimetype+png'
   NOTEBOOK_FLT: '-Recurse *.ipynb'
   MASTER_BRANCH: 'refs/heads/master'
   GENERATED_BRANCH: 'generated'
@@ -28,9 +33,11 @@ jobs:
 
     steps:
     - name: Source reference (on workflow_dispatch)
-      if: github.event.inputs.SRC_REF
+      if: github.event.inputs
       run: |
         echo "SRC_REF=${{ github.event.inputs.SRC_REF }}" >> ${env:GITHUB_ENV}
+        echo "DST_REF=${{ github.event.inputs.DST_REF }}" >> ${env:GITHUB_ENV}
+        echo "PLOTLY_RENDERER=${{ github.event.inputs.RENDERER }}" >> ${env:GITHUB_ENV}
 
     - uses: actions/checkout@v2
       with:
