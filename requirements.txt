@@ -2,3 +2,4 @@ jupyter
 plotly
 kaleido
 pandas
+git+https://github.com/trundev/poly_approx.git@setup
