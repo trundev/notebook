@@ -1,6 +1,7 @@
 # Jupyter notebooks
 
-Jupyter notebook playground.
+Jupyter notebook playground
+[![Binder](https://mybinder.org/badge.svg)](https://mybinder.org/v2/gh/trundev/notebook/master)
 
 > The notebooks in the [master](../../tree/master) branch of this repository may not include the output from the Python cells, like plots.
 > The goal is to commit the actual _source_ changes only, but not the generated result, i.e. images, tables, etc.
@@ -12,3 +13,6 @@ Jupyter notebook playground.
 Work in progress _(with "generated" output on nbviewer.org)_:
 
 - [RLC circuit model](https://nbviewer.org/github/trundev/notebook/tree/generated/rlc_circuit.ipynb) ([original](rlc_circuit.ipynb)) - Model of resistor-inductor-capacitor electronic circuit
+
+- [RLC calculator](https://nbviewer.org/github/trundev/notebook/tree/generated/rlc_calc.ipynb) ([original](rlc_calc.ipynb)) - Example calculation
+of RLC circuit parameters and initial conditions, at the startup and after a shock-change in some of the component values
