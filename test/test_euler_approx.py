@@ -2,9 +2,11 @@ import sys
 import cmath
 #import pytest
 import pandas as pd
+import numpy as np
 
  # Module to be tested
 import euler_approx
+import rlc_funcs
 
 
 if True:
@@ -142,6 +144,57 @@ def test_log_derivatives():
                 assert is_equal(omega, ref_omega, margin), \
                         f'Calculated omega {omega} does not match the expectation {ref_omega}'
 
+def test_via_rlc_funcs():
+    """Validate omega calculation by using the actual RLC derivatives"""
+    ref_omegas = solve_quadratic(TEST_INDUCTANCE, TEST_RESISTANCE, 1/TEST_CAPACITANCE)
+    print('Expected:', '\n\t'.join(omega_repr(omega) for omega in ref_omegas))
+
+    t = np.linspace(0, .01, num=20)
+    ref_omegas = np.array(ref_omegas)
+    ref_phis = np.zeros_like(ref_omegas)
+    derivs_arr = rlc_funcs.calc_rlc_fn_derivs(4, ref_omegas, ref_phis, t)
+
+    # Strip the imaginary function/derivative component, to confirm that the formulas
+    # can calculate omega from real components only.
+    # Note:
+    # Such imaginary values appears, when 'ref_phis' are different.
+    if derivs_arr.imag.any():
+        print(f'Strip {np.count_nonzero(derivs_arr.imag)} imaginary derivative components')
+    derivs_arr = derivs_arr.real
+
+    for t, deriv_set in zip(t, derivs_arr.T):
+        print(f'{t:.5f}: Input derivatives')
+        print(f'  {deriv_set}')
+
+        #
+        # Check if the voltage sum is zero
+        #
+        r_volt = deriv_set[1] * TEST_CAPACITANCE * TEST_RESISTANCE
+        l_volt = deriv_set[2] * TEST_CAPACITANCE * TEST_INDUCTANCE
+        volt_sum = deriv_set[0] + r_volt + l_volt
+        assert is_equal(volt_sum, 0, 1e-15), f'Nonzero voltage sum at {t}'
+
+        #
+        # Use regular derivatives
+        #
+        omegas = euler_approx.calc_omegas_from_4derivs(deriv_set)
+        print(f'  omegas:', '\n\t'.join(omega_repr(omega) for omega in omegas))
+
+        #
+        # Go through logarithmic derivatives
+        #
+        log_derivs = euler_approx.calc_3log_derivs(deriv_set)
+        print('  Logarithmic derivatives:')
+        print(f'  {log_derivs}')
+
+        omegas = euler_approx.calc_omegas_from_log_derivs(log_derivs)
+        print('    omegas:', '\n\t'.join(omega_repr(omega) for omega in omegas))
+
+        margin = 1e-8
+        for omega, ref_omega in zip(omegas, ref_omegas):
+            assert is_equal(omega, ref_omega, margin), \
+                    f'Calculated omega {omega} does not match the expectation {ref_omega}'
+
 #
 # For non-pytest debugging
 #
@@ -156,5 +209,8 @@ if __name__ == '__main__':
     if res:
         sys.exit(res)
     res = test_log_derivatives()
+    if res:
+        sys.exit(res)
+    res = test_via_rlc_funcs()
     if res:
         sys.exit(res)

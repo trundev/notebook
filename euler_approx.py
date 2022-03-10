@@ -55,7 +55,8 @@ class deriv_approx(poly_approx.approximator):
 
     def reversed_iter_derivs(self, min_rank=0):
         """Iterator over the calculated derivatives"""
-        for t, deriv_set in reversed(self.derivs.items()):
+        # The tuple() is only needed for python 3.7, i.e. https://mybinder.org/
+        for t, deriv_set in reversed(tuple(self.derivs.items())):
             if len(deriv_set) >= min_rank:
                 yield t, deriv_set
 
