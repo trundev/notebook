@@ -1,5 +1,7 @@
+numpy
 jupyter
 plotly
 kaleido
 pandas
+ipywidgets
 git+https://github.com/trundev/poly_approx.git@setup
