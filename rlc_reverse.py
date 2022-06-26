@@ -135,6 +135,39 @@ if __name__ == '__main__':
             b0 = b0 * PLUS_MINUS
         test_combined(a + b, a0 + b0, sample_dt, conjugated=add_conj)
 
+    #
+    # Sample "critical" data:
+    # two real coefficient sets conjugated and non-conjugated give the same result
+    #
+    crit_omega1 = np.asarray(-.1 + np.pi/2)
+    crit_phi1 = np.asarray(3.8888888888888893 + 2*crit_omega1)
+    print(f'Critical data I (from non-conjugated coefficients) {crit_omega1=}, {crit_phi1=}:')
+    res1 = rlc_funcs.calc_euler_derivs(1, crit_omega1, crit_phi1, np.arange(4)*.25)[0]
+    print(f'  {res1}')
+
+    crit_omega2 = np.log(5 + PLUS_MINUS * 3.872983346207417) / .25
+    crit_phi2 = np.log([75.85583107467721, 1775.4170458082385])
+    print(f'Critical data II (from conjugated coefficients) {crit_omega2=}, {crit_phi2=}:')
+    res2 = rlc_funcs.calc_euler_derivs(1, crit_omega2, crit_phi2, np.arange(4)*.25)[0]
+    res2 = res2.mean(0)
+    print(f'  {res2}')
+    print(f'  {res1-res2=}')
+
+    print('---')
+    crit_omega1 = np.asarray(-.1 + np.pi/2)
+    crit_phi1 = np.asarray(-5)
+    print(f'Critical data I (from non-conjugated coefficients) {crit_omega1=}, {crit_phi1=}:')
+    res1 = rlc_funcs.calc_euler_derivs(1, crit_omega1, crit_phi1, np.arange(4)*.25)[0]
+    print(f'  {res1}')
+
+    crit_omega2 = np.log(-2 + PLUS_MINUS * 3.4641016151377544 + 0j) / .25
+    crit_phi2 = np.log([0.013437587072432266, 3.830692573866725e-05])
+    print(f'Critical data II (from conjugated coefficients) {crit_omega2=}, {crit_phi2=}:')
+    res2 = rlc_funcs.calc_euler_derivs(1, crit_omega2, crit_phi2, np.arange(4)*.25)[0]
+    res2 = res2.mean(0)
+    print(f'  {res2.real}')
+    print(f'  {res1-res2.real=}')
+
     print('=== Simple attenuating oscillation ===')
     test_combined(complex(-.1, np.pi/2), 0, .25)
     print('=== Conjugated attenuating oscillation ===')
