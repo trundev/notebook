@@ -84,7 +84,7 @@ jobs:
 
     - name: Update "${{ env.GENERATED_BRANCH }}" branch
       id: make_gen
-      if: github.ref == env.MASTER_BRANCH
+      if: github.ref == env.MASTER_BRANCH && github.event.pusher
       run: |
         git fetch origin refs/heads/${{ env.GENERATED_BRANCH }}
         if (!$LASTEXITCODE) {
