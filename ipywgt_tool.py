@@ -32,14 +32,16 @@ def split_complex(cvals: np.array, aux_vals: np.array or None=None, /,
     return cvals
 
 def split_xyz(**kwargs):
-    """Split single xy/xyz keys into {x, y, z}"""
+    """Split single xy/xyz keys into {x, y, z}, lon_lat_z into {lon, lat, z}"""
     # Try the suported keys one by one
-    for xyz_key in 'xyz', 'zxy', 'yzx', 'xy', 'yx':
+    for xyz_key in 'xyz', 'zxy', 'yzx', 'xy', 'yx', 'lon_lat', 'lat_lon', 'lon_lat_z':
         val = kwargs.get(xyz_key)
         if val is not None:
             kwargs = kwargs.copy()
             del kwargs[xyz_key]
             # Create new key from individual 'xyz_key' chars and 'val' axis -2
+            if '_' in xyz_key:
+                xyz_key = xyz_key.split('_')
             for i, key in enumerate(xyz_key):
                 kwargs[key] = val[..., i, :]
             break   # Makes sense to have just one such key
@@ -115,6 +117,18 @@ def add_scatter3d(fig: object, **kwargs) -> fig_obj_wrapper:
     """Wraps Figure.add_scatter3d()"""
     return add_fig_data(fig.add_scatter3d, **kwargs)
 
+def add_scattergeo(fig: object, **kwargs) -> fig_obj_wrapper:
+    """Wraps Figure.add_scatter3d()"""
+    return add_fig_data(fig.add_scattergeo, **kwargs)
+
+def add_scattermapbox(fig: object, **kwargs) -> fig_obj_wrapper:
+    """Wraps Figure.add_scatter3d()"""
+    return add_fig_data(fig.add_scattermapbox, **kwargs)
+
+def add_densitymapbox(fig: object, **kwargs) -> fig_obj_wrapper:
+    """Wraps Figure.add_scatter3d()"""
+    return add_fig_data(fig.add_densitymapbox, **kwargs)
+
 def add_annotation(fig: object, **kwargs) -> fig_obj_wrapper:
     """Wraps Figure.add_annotation()"""
     idx = len(fig.layout.annotations)
@@ -162,9 +176,13 @@ def update_fig_objs(objs: tuple[fig_obj_wrapper] or fig_obj_wrapper, **kwargs):
             # The key-value can be multiple or single element
             # - multiple: spread around the objects, None after exhaustion
             # - single: the same for each object
-            atom_val = None if _is_iterable(val) else val
-            for idx, obj in enumerate(objs):
-                obj[key] = atom_val or val[idx] if len(val) > idx else None
+            def val_gen(val):
+                if _is_iterable(val):
+                    for v in val: yield v
+                    val = None  # Exhausted multiple-value
+                while True: yield val
+            for obj, v in zip(objs, val_gen(val)):
+                obj[key] = v
 
 def update_fig_objs_xyz(objs: tuple[fig_obj_wrapper] or fig_obj_wrapper, **kwargs):
     """Update existing scatter/scatter3d(s), by splitting single xy/xyz keys"""
@@ -268,10 +286,12 @@ def test_plot_data_scatters():
     update_fig_objs([scatt_1, scatt_2],
             x=np.arange(10).reshape((2,-1)),    # Iterable exact
             y=np.arange(10).reshape((1,-1)),    # Iterable exhaustible
-            mode='markers')                     # Single
+            mode='markers',                     # Single (string)
+            marker_size=7)                      # Single (int)
     assert (fig.data[0].x == np.arange(5)).all(), 'Iterables must spread around'
     assert (fig.data[0].y == np.arange(10)).all()
-    assert fig.data[0].mode == 'markers' and fig.data[1].mode == 'markers', 'Non-iterables must be reused'
+    assert fig.data[0].marker.size == 7 and fig.data[1].marker.size == 7, 'Non-iterables must be reused'
+    assert fig.data[0].mode == 'markers' and fig.data[1].mode == 'markers', 'Strings must treated as non-iterables'
     assert fig.data[1].y is None, 'Exhausted iterable must assigns None'
 
     # Try to call some functions
@@ -332,6 +352,37 @@ def test_multiple():
     assert (fig.data[0].z == np.arange(8, 12)).all() \
             and (fig.data[1].z == np.arange(20, 24)).all() \
             and fig.data[2].z is None
+
+    # Create mapbox scatter objects
+    scatts = add_multiple(fig, add_scattermapbox,
+            name=['first_mbox', 'second_mbox'])   # Iterable exact
+    assert (fig.data[3].name == 'first_mbox' and fig.data[4].name == 'second_mbox')
+
+    # Update using combined lon_at coordinates
+    update_fig_objs_xyz(scatts,
+            **{'lon_lat': np.arange(12).reshape((2,2,-1))},  # lonxyz iterable
+            mode='lines')
+    assert (fig.data[3].lon == np.arange(3)).all() \
+            and (fig.data[4].lon == np.arange(3) + 6).all()
+    assert (fig.data[3].lat == np.arange(3) + 3).all() \
+            and (fig.data[4].lat == np.arange(3) + 9).all()
+
+    # Create mapbox density objects
+    scatts = add_multiple(fig, add_densitymapbox,
+            name=['first_mbox', 'second_mbox'])   # Iterable exact
+    assert (fig.data[3].name == 'first_mbox' and fig.data[4].name == 'second_mbox')
+
+    # Update using combined lon_lat_z coordinates
+    update_fig_objs_xyz(scatts,
+            **{'lon_lat_z': np.arange(18).reshape((2,3,-1))},  # lonxyz iterable
+            radius=10)
+    assert (fig.data[5].lon == np.arange(3)).all() \
+            and (fig.data[6].lon == np.arange(3) + 9).all()
+    assert (fig.data[5].lat == np.arange(3) + 3).all() \
+            and (fig.data[6].lat == np.arange(3) + 12).all()
+    assert (fig.data[5].z == np.arange(3) + 6).all() \
+            and (fig.data[6].z == np.arange(3) + 15).all()
+    assert fig.data[5].radius == 10 and fig.data[6].radius == 10
 
 #
 # Test scenarios
