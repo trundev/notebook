@@ -69,6 +69,34 @@ def test_main():
         np.testing.assert_allclose(res, ref_res, equal_nan=True, atol=1e-6,
                 err_msg='Wrong determinant {degree}')
 
+def test_complex():
+    """Tests with complex(oscillating) exponent functions"""
+    # Select a random seed, but print it to allow exact reproduction
+    seed = np.random.randint(1<<16)
+    print(f'* Random seed {seed}')
+    rng = np.random.default_rng(seed)
+
+    # Three random oscillations with decay
+    exps = rng.random(3) * 2j * np.pi
+    exps -= rng.random(exps.shape)
+    print(f'Inividual rotations [deg]: {np.round(exps.imag * 180 / np.pi, 1)}')
+    data = np.exp(exps * np.arange(20)[:, np.newaxis]).mean(-1)
+
+    for degree in range(exps.size - 1, exps.size + 2):
+        print(f'Testing {exps.size} exponents with matrix degree {degree}')
+        res = number_wall.calc_row_via_permutations(data, degree)
+        # Cut the leading/trailing NaN-s
+        res = res[degree:-degree]
+        if degree == exps.size - 1:
+            # When matrix size is equal to the number of exponents,
+            # determinants must form a geometric progression
+            rotation = res[1:] / res[:-1]
+            print(f'  Result rotation steps [deg]: {np.round(np.angle(rotation, deg=True), 1)}')
+            np.testing.assert_allclose(rotation, rotation[0])
+        elif degree >= exps.size:
+            # when matrix size is larger than the number of exponents,
+            # determinants must be zero
+            np.testing.assert_allclose(res, 0, atol=1e-16)
 
 #
 # For non-pytest debugging
@@ -81,5 +109,8 @@ if __name__ == '__main__':
     #if res:
     #    sys.exit(res)
     res = test_main()
+    if res:
+        sys.exit(res)
+    res = test_complex()
     if res:
         sys.exit(res)
