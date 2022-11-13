@@ -97,20 +97,109 @@ def take_by_masks(data: np.array, masks: np.array):
         assert (mask_dims == mask_dims[0]).all(), 'Mask is not uniform'
     return data[..., masks].reshape(data.shape[:-1] + (-1,))
 
-def det_from_combination(take_data: callable, data_indices: np.array, row_base: int) -> np.array:
+def take_data_matrix(data: np.array, col_idxs: np.array, row_base: int) -> np.array:
+    """Callback to extract matrix data for determinant calculation
+
+    Parameters
+    ----------
+    data : (..., M, M) array_like
+        The source to retrieve data from
+    col_idxs : (..., P, N) array_like
+        The columns to be read, grouped in the last dimension
+    row_base : int
+        The index of row to start reading, i.e. row for col_idxs[..., 0],
+        others are increasing by one
+
+    Returns
+    -------
+    data : (..., P, N) array_like
+        The data at corresponding `col_idxs` starting at `row_base`
+    """
+    return data[..., np.arange(col_idxs.shape[-1]) + row_base, col_idxs]
+
+def take_data_numwall(data: np.array, num_rows: int, num_dets: int or None,
+        col_idx: np.array, row_base: int) -> np.array:
+    """Callback to convert data to number-wall style matrix
+
+    Parameters
+    ----------
+    num_rows : int
+        Number of rows in the topmost number-wall matrix
+    num_dets : int or None
+        Number of sequential determinants to be returned (for parallel processing)
+    - Others: see take_data_matrix()
+    """
+    # Convert indices using the number-wall style data-order
+    col_idx += num_rows - 1 - (np.arange(col_idx.shape[-1]) + row_base)
+    if num_dets is not None:
+        # Retrieve data for multiple determinants starting at each possible index
+        col_idx = col_idx + np.arange(num_dets).reshape((-1,) + (1,) * col_idx.ndim)
+    return data[..., col_idx]
+
+def det_sum_simple(products: np.array, odd_masks: np.array) -> np.array:
+    """Simple determinat sum implementation
+
+    Sum the products by negating the odd-permutations
+    """
+    res = np.negative(products, out=products, where=odd_masks)
+    return res.sum(-1)
+
+def det_sum_split(products: np.array, odd_masks: np.array) -> np.array:
+    """Split determinat sum implementation
+
+    This should reduce the float precision loss in intermediate sum() results
+    """
+    even_res = res[..., ~odd_masks]
+    odd_res = res[..., odd_masks]
+    # First sum the common pairs of even and odd permutations
+    comm_size = min(even_res.shape[-1], odd_res.shape[-1])
+    res = (even_res[..., :comm_size] - odd_res[..., :comm_size]).sum(-1)
+    # Then add the remainder from even or odd ones
+    return res + even_res[..., comm_size:].sum(-1) - odd_res[..., comm_size:].sum(-1)
+
+def det_minors_of_columns(take_data: callable, col_idxs: np.array, row_base: int, *,
+        minor_size: int, left_only=False,
+        max_det_size: int = MAX_DET_SIZE, det_sum: callable = det_sum_simple) -> np.array:
+    """Minor determinants of all combinations of sub-matrices, return left and/or right ones"""
+    # Represent the sub-matrix combinations as masks to easily switch from left to right side
+    masks = combinations_masks(col_idxs.shape[-1], minor_size)
+    # Calculate left-side minors
+    res = det_of_columns(take_data, take_by_masks(col_idxs, masks),
+            row_base, max_det_size=max_det_size, det_sum=det_sum)
+    if left_only:
+        res = res, None
+    else:
+        # Calculate right-side minors (optional)
+        res = res, det_of_columns(take_data, take_by_masks(col_idxs, ~masks),
+                row_base + minor_size, max_det_size=max_det_size, det_sum=det_sum)
+
+    # Third element is the parity of combination
+    res = *res, combinations_parity(masks)
+    return res
+
+def det_of_columns(take_data: callable, col_idxs: np.array, row_base: int, *,
+        max_det_size: int = MAX_DET_SIZE, det_sum: callable = det_sum_simple) -> np.array:
     """Matrix determinant calculation on given combinations of indices
 
-        take_data(col_idxs, row_base) - callback to retrieve actual data
-            The columns to be read, are grouped in the last "col_idxs" dimension
-            The corresponding rows are sequential numbers starting at "row_base"
-            Example:
-                return matrix[np.arange(col_idxs.shape[-1]) + row_base, col_idxs]
+    Parameters
+    ----------
+    take_data : function(I, i) -> (V)
+        Callback to retrieve actual data, see take_data_matrix()
+    col_idxs : array_like
+        Indices of matrix columns to calculate determinant
+    row_base : int
+        Index of fist row to calculate determinant, the number of rows is
+        `col_idxs.shape[-1]`
+    max_det_size : int, optional
+        Max size of intermediate sub-matrices to avoid overflows
+    det_sum : function(V, M) -> (S)
+        Callback to do the final determinant sum, see det_sum_simple()
     """
     # Calculate only the determinants, that are small enough
-    if data_indices.shape[-1] <= MAX_DET_SIZE:
+    if col_idxs.shape[-1] <= max_det_size:
         # Combine all permutations in a single array
-        idxs = permutations_indices(data_indices.shape[-1])
-        perms = data_indices[..., idxs]
+        idxs = permutations_indices(col_idxs.shape[-1])
+        perms = col_idxs[..., idxs]
 
         res = take_data(perms, row_base)
         del perms
@@ -123,51 +212,70 @@ def det_from_combination(take_data: callable, data_indices: np.array, row_base: 
     else:
         # Split each determinant into two minor-determinants (from sub-matrices):
         # main (left-side) minor and remainder (right-size) minor
-        minor_size = data_indices.shape[-1]//2
-        masks = combinations_masks(data_indices.shape[-1], minor_size)
-        minors = take_by_masks(data_indices, masks)
-        r_minors = take_by_masks(data_indices, ~masks)
-
-        minors = det_from_combination(take_data, minors, row_base)
-        r_minors = det_from_combination(take_data, r_minors, row_base + minor_size)
+        split = (col_idxs.shape[-1] + 1) // 2
+        minors, r_minors, odd_masks = det_minors_of_columns(take_data, col_idxs, row_base,
+                minor_size = split, left_only=False,
+                max_det_size=max_det_size, det_sum=det_sum)
         # Apply determinant rule: products from sub-determinants
         res = minors * r_minors
         del minors, r_minors
 
-        # Get the combination parity
-        odd_masks = combinations_parity(masks)
-        del masks
-
     # Apply determinant rule: sum the products by negating the odd-permutations
-    # Note:
-    # This is preferred, instead of "res[..., odd_masks] *= -1", to prevent from
-    # float precision loss in intermediate results during sum()
-    even_res = res[..., ~odd_masks]
-    odd_res = res[..., odd_masks]
-    # First sum the common pairs of even and odd permutations
-    comm_size = min(even_res.shape[-1], odd_res.shape[-1])
-    res = (even_res[..., :comm_size] - odd_res[..., :comm_size]).sum(-1)
-    # Then add the remainder from even or odd ones
-    res += even_res[..., comm_size:].sum(-1)
-    res -= odd_res[..., comm_size:].sum(-1)
-    return res
+    return det_sum(res, odd_masks)
 
-def calc_row_via_permutations(data: np.array, degree: int, nan=np.nan) -> np.array:
+def det(data: np.array, *, max_det_size: int = MAX_DET_SIZE) -> np.array:
+    """Compute the determinant of an array - our version of numpy.linalg.det()
+
+    Parameters
+    ----------
+    data : (..., M, M) array_like
+        Input array to compute determinants for.
+    max_det_size : int, optional
+        Max size of intermediate sub-matrices to avoid overflows
+
+    Returns
+    -------
+    det : (...) array_like
+        Determinant of `data`.
+    """
+    assert data.shape[-1] == data.shape[-2], 'Non-square data matrix'
+
+    def take_data(col_idxs, row_base):
+        return take_data_matrix(data, col_idxs, row_base)
+    return det_of_columns(take_data, np.arange(data.shape[-1]), 0,
+            max_det_size=max_det_size)
+
+def det_minors(data: np.array, *, max_det_size: int = MAX_DET_SIZE) -> np.array:
+    """Compute the minor determinants of an array
+
+    Parameters
+    ----------
+    data : (..., M, N) array_like
+        Input array to compute minor determinants for (`M < N`).
+
+    - Others: see det()
+    """
+    assert data.shape[-1] >= data.shape[-2], 'Unexpected shape of data matrix'
+
+    def take_data(col_idxs, row_base):
+        return take_data_matrix(data, col_idxs, row_base)
+    res, _, odd_masks = det_minors_of_columns(take_data, np.arange(data.shape[-1]), 0,
+            minor_size=data.shape[-2], left_only=True,
+            max_det_size=max_det_size)
+    return np.negative(res, out=res, where=odd_masks)
+
+def calc_row_via_permutations(data: np.array, degree: int, nan=np.nan, *,
+        max_det_size: int = MAX_DET_SIZE) -> np.array:
     """Calculate number-wall row from the first row, by using a custom determinant algorithm
 
     This should be more generic, esp. allow array of Polynomial-s, but for higher 'degree'
     values can be slow/memory consuming.
     """
-    def take_data(indices, row_base):
-        """Take data from number-wall style matrix"""
-        # Convert indices using the number-wall style data-oder
-        indices += degree - np.arange(indices.shape[-1]) - row_base
-        # Retrieve data for multiple determinants starting at each possible index
-        indices = indices + np.arange(data.shape[-1] - 2*degree).reshape((-1,) + (1,) * indices.ndim)
-        return data[indices]
-
-    # Split individual determinant permutations into manageable chunks
-    res = det_from_combination(take_data, np.arange(degree + 1), 0)
+    num_dets = data.shape[-1] - 2*degree
+    def take_data(col_idx, row_base):
+        return take_data_numwall(data, degree + 1, num_dets, col_idx, row_base)
+    res = det_of_columns(take_data, np.arange(degree + 1), 0,
+            max_det_size=max_det_size)
     return np.pad(res, degree, constant_values=nan)
 
 #
