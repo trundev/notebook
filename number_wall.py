@@ -278,6 +278,75 @@ def calc_row_via_permutations(data: np.array, degree: int, nan=np.nan, *,
             max_det_size=max_det_size)
     return np.pad(res, degree, constant_values=nan)
 
+def try_decomposition(data: np.array, degree: int):
+    """Experimental decomposition of mixed polynomial function"""
+    # Note: 'use_left_only' needs one less 'num_rows', to provide one more 'num_dets'
+    num_dets = data.shape[-1] - 2*degree + 1
+    def take_data(col_idx, row_base):
+        return take_data_numwall(data, degree, num_dets, col_idx, row_base)
+    minors, _, odd_masks = det_minors_of_columns(take_data, np.arange(degree + 1), 0,
+            minor_size=degree, left_only=True)
+
+    # Find valid solutions
+    minors = minors[...,::-1]   # Reorder 'minors' order to match 'data'
+    vals_arr = data[..., np.arange(minors.shape[-2])[:, np.newaxis] + np.arange(2*degree)]
+    res = det_sum_simple(minors * vals_arr[...,:minors.shape[-1]], odd_masks)
+    # Only where the determinant is zero (the solution is valid)
+    zero_mask = np.isclose(res, 0)
+    if not zero_mask.any():
+        print(f'No zero determinants found')
+        return None
+
+    # Mask-out invalid solutions
+    minors = minors[zero_mask]
+    vals_arr = vals_arr[zero_mask]
+    # Apply sub-matrix parity
+    np.negative(minors, out=minors, where=odd_masks)
+    # Obtain the values of 't'
+    t_total = np.arange(res.shape[-1])[zero_mask]
+
+    # Recheck minors vs. right-side boundary data (odd_masks are already applied)
+    np.testing.assert_allclose(det_sum_simple(minors * vals_arr[...,-minors.shape[-1]:], False), 0)
+
+    # The left-side minors are characteristic polynomials
+    minors = np.apply_along_axis(np.polynomial.Polynomial, -1, minors)
+    roots_arr = np.frompyfunc(np.polynomial.Polynomial.roots, 1, 1)(minors)
+    for roots, poly, vals, t in zip(roots_arr, minors, vals_arr, t_total):
+        print(f'- characteristic polynomial at {t}: {poly}')
+        # Check if any roots were found
+        if roots.size:
+            #FIXME: The polynomial roots usually deviates
+            # However, it is important to identify the duplicate ones
+            roots = np.real_if_close(np.round(roots, 4))
+            print(f'\troots = {roots}')
+            # Select powers of the polynomial:
+            # each duplicated root increases the power (polynomial degree)
+            t_powers = np.zeros_like(roots, dtype=int)
+            for idx, fl in enumerate(np.isclose(roots[1:], roots[:-1])):
+                np.putmask(t_powers[idx + 1,...], fl, t_powers[idx,...] + 1)
+            # Range of the main function argument (t)
+            t_range = np.arange(roots.shape[-1], dtype=roots.dtype)[...,np.newaxis] + t
+            # Spread polynomial: t power individual polynomial degrees
+            system_matrix = t_range ** t_powers
+            # Spread exponent: root on power t
+            system_matrix *= roots ** t_range
+            # Solve system of equations
+            inv = np.linalg.inv(system_matrix)
+            vals = vals[:roots.size]
+            a_coefs = inv.dot(vals)
+            print(f'\ta_ij = {a_coefs}')
+            print(f'\t' + ' + '.join(
+                    f'{a}*t**{j}*{b}**t' if j else f'{a}*{b}**t'
+                    for a,b,j in zip(a_coefs, roots, t_powers) if a))
+
+            # Calculate-back the polynomial and compare with data
+            t_range = np.arange(2*degree)[...,np.newaxis] + t
+            total = (a_coefs * t_range ** t_powers * roots ** t_range).sum(-1)
+            ref_data = data[t:t + len(total)]
+            print(f'\ttotal', total, '\n\texpected', ref_data)
+            np.testing.assert_allclose(total, ref_data)
+
+
 #
 # Test scenarios
 #
@@ -299,4 +368,28 @@ if __name__ == '__main__':
     for r in range(0, num_rows):
         res = calc_row_via_permutations(data, r, nan)
         print(f'{r}: {np.round(res, 3)}')
+    print()
+
+    # Decompose second-degree exponential-polynomial
+    degree = 2
+    t = np.arange(2*degree)     # Need 2 samples for each degree
+    data = (1) * 2**t + (3) * 1**t
+    print(f'Exponent plus constant: {data}')
+    try_decomposition(data, degree)
+    print()
+    data = (3*t + 5) * 2**t
+    print(f'Exponent by 1-deg polynomial: {data}')
+    try_decomposition(data, degree)
+    print()
+
+    # Decompose third-degree exponential-polynomial
+    degree = 3
+    t = np.arange(2 + 2*degree) # Need 2 samples for each degree, +2 for total 3 results
+    data = (1) * 2**t + (3*t + 5) * 1**t
+    print(f'Exponent plus exponent by polynomial: {data}')
+    try_decomposition(data, degree)
+    print()
+    data = (3*t**2 + 1) * 2**t
+    print(f'Exponent by polynomial (2deg): {data}')
+    try_decomposition(data, degree)
     print()
