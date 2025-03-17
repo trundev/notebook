@@ -27,9 +27,13 @@ env:
   GENERATED_BRANCH: 'generated'
   GENERATED_BRANCH_OLD: 'generated-old'
 
+defaults:
+  run:
+    shell: pwsh
+
 jobs:
   generate:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
     - name: Process workflow_dispatch inputs
@@ -39,7 +43,7 @@ jobs:
         echo "DST_REF=${{ github.event.inputs.DST_REF }}" >> ${env:GITHUB_ENV}
         echo "PLOTLY_RENDERER=${{ github.event.inputs.RENDERER }}" >> ${env:GITHUB_ENV}
 
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
       with:
         ref: ${{ env.SRC_REF }}
 
@@ -50,23 +54,54 @@ jobs:
         echo "DST_REF=$DST_REF" >> ${env:GITHUB_ENV}
         echo "DST_REF set to $DST_REF"
 
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v2
+    - name: Set up Python 3.13
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.10'
+        python-version: '3.13'
 
     - name: Install Jupyter
       run: |
         pip install -r requirements.txt
 
+    - name: Add job summary
+      run: |
+        "<details><summary>Workflow parameters</summary>
+
+          | Variable   | Value |
+          |------------|-------|
+          | github.ref | ${{ github.ref }} |
+          | SRC_REF    | ${{ env.SRC_REF }} |
+          | DST_REF    | ${{ env.DST_REF }} |
+          | PLOTLY_RENDERER | ${{ env.PLOTLY_RENDERER }} |
+        </details>
+
+        <details><summary>Installed packages</summary>
+
+          | Package    | Version |
+          |------------|---------|
+        $(pip freeze | ForEach-Object {
+          "  | $($_ -replace '==', ' | ' -replace ' @ ', ' | ') |"} |
+          Join-String -Separator "`n")
+        </details>
+        " >> $env:GITHUB_STEP_SUMMARY
+
     - name: Execute Jupyter notebooks
       run: |
         foreach ($file in Get-ChildItem ${{ env.NOTEBOOK_FLT }}) {
           echo "Processing $($file.Name)..."
-          jupyter nbconvert --to notebook --inplace --execute $file
-          if ($LASTEXITCODE) {exit $LASTEXITCODE}
-
-          git add $file
+          "<details><summary>$($file.Name)</summary>
+          " >> $env:GITHUB_STEP_SUMMARY
+          '```' >> $env:GITHUB_STEP_SUMMARY
+          jupyter nbconvert --to notebook --inplace --ExecutePreprocessor.timeout=300 --execute $file `
+              2>&1 | Tee-Object -Append $env:GITHUB_STEP_SUMMARY
+          '```
+          </details>
+          ' >> $env:GITHUB_STEP_SUMMARY
+          if ($LASTEXITCODE) {
+            "  > Failed, code: $LASTEXITCODE" >> $env:GITHUB_STEP_SUMMARY
+          } else {
+            git add $file
+          }
         }
 
     - name: Commit to ${{ env.DST_REF }}
@@ -101,3 +136,6 @@ jobs:
       run: |
         git tag ${{ env.DST_REF }}
         git push origin refs/tags/${{ env.DST_REF }}
+        if ($LASTEXITCODE) {exit $LASTEXITCODE}
+
+        "[Generated commit](${{ github.server_url }}/${{ github.repository }}/commit/${{ env.DST_REF }})" >> $env:GITHUB_STEP_SUMMARY

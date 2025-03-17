@@ -4,4 +4,5 @@ plotly
 kaleido
 pandas
 ipywidgets
+anywidget
 git+https://github.com/trundev/poly_approx.git@setup
