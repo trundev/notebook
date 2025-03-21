@@ -16,3 +16,6 @@ Work in progress _(with "generated" output on nbviewer.org)_:
 
 - [RLC calculator](https://nbviewer.org/github/trundev/notebook/tree/generated/rlc_calc.ipynb) ([original](rlc_calc.ipynb)) - Example calculation
 of RLC circuit parameters and initial conditions, at the startup and after a shock-change in some of the component values
+
+- [Multi-vector magnitude](https://nbviewer.org/github/trundev/notebook/tree/generated/multivector-magnitude.ipynb) ([original](multivector-magnitude.ipynb)) -
+  Magnitude of GA multi-vector from determinant of its matrix form

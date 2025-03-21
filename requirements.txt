@@ -5,4 +5,5 @@ kaleido
 pandas
 ipywidgets
 anywidget
+kingdon
 git+https://github.com/trundev/poly_approx.git@setup
