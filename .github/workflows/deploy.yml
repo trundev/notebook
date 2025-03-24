@@ -1,0 +1,87 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main, '**-test']
+  pull_request:
+    branches: ['*']
+
+env:
+  PLOTLY_RENDERER: 'plotly_mimetype+png'
+  NOTEBOOK_FLT: '-Recurse content/*.ipynb'
+  PREPROCESSOR_TIMEOUT: 900
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install the dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          "<details><summary>Installed packages</summary>
+
+            | Package  | Version |
+            |----------|---------|
+          $(pip freeze | ForEach-Object {
+            "  | $($_ -replace '==', ' | ' -replace ' @ ', ' | ') |"} |
+            Join-String -Separator "`n")
+          </details>
+          " >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Execute Jupyter notebooks
+        run: |
+          foreach ($file in Get-ChildItem ${{ env.NOTEBOOK_FLT }}) {
+            echo "Processing $($file.Name)..."
+            "<details><summary>$($file.Name)</summary>
+            `n" + '```' >> $env:GITHUB_STEP_SUMMARY
+            jupyter nbconvert --to notebook --inplace  --execute $file `
+                --ExecutePreprocessor.timeout=${{ env.PREPROCESSOR_TIMEOUT }} `
+                2>&1 | Tee-Object -Append $env:GITHUB_STEP_SUMMARY
+            '```
+            </details>
+            ' >> $env:GITHUB_STEP_SUMMARY
+            if ($LASTEXITCODE) {
+              "  > Failed, code: $LASTEXITCODE" >> $env:GITHUB_STEP_SUMMARY
+            } else {
+              git add $file
+            }
+          }
+
+      - name: Build the JupyterLite site
+        run: |
+          Copy-Item README.md content
+          jupyter lite build --contents content --output-dir dist
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

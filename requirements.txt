@@ -1,9 +1,17 @@
-numpy
-jupyter
+# Core modules (mandatory)
+jupyterlite-core
+jupyterlab
+notebook
+
+# Python kernel (optional)
+jupyterlite-pyodide-kernel
+
+# Python: anywidget library for Jupyter notebooks (optional)
+anywidget
+
+# Notebook dependencies (allow execution by GitHub workflow)
+pandas
 plotly
 kaleido
-pandas
-ipywidgets
-anywidget
 kingdon
-git+https://github.com/trundev/poly_approx.git@setup
+git+https://github.com/trundev/poly_approx.git

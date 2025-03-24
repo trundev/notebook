@@ -11,13 +11,13 @@ import rlc_funcs
 
 if True:
     # Oscillating sample
-    TEST_DATA = 'falstad-data/100mH_10_15uF-capacitor.txt.csv'
+    TEST_DATA = 'content/falstad-data/100mH_10_15uF-capacitor.txt.csv'
     TEST_CAPACITANCE = 15e-6    # 15uF
     TEST_RESISTANCE = 10        # 10Ohm
     TEST_INDUCTANCE = .1        # 100mH
 elif True:
     # Non-oscillating sample
-    TEST_DATA = 'falstad-data/100mH_200_15uF-capacitor.txt.csv'
+    TEST_DATA = 'content/falstad-data/100mH_200_15uF-capacitor.txt.csv'
     TEST_CAPACITANCE = 15e-6    # 15uF
     TEST_RESISTANCE = 200       # 200Ohm
     TEST_INDUCTANCE = .1        # 100mH
