@@ -7,13 +7,15 @@ Here the RLC functions are used in the form:
     t * e^(omega*t + phi_1) + e^(omega*t + phi_2)
 """
 import numpy as np
+import numpy.typing as npt
 
-def solve_quadratic(a: np.array, b: np.array, c: np.array) -> np.array:
+
+def solve_quadratic(a: npt.NDArray, b: npt.NDArray, c: npt.NDArray) -> npt.NDArray:
     """Calculate the two solutions of quadratic equation"""
     sqrt = np.sqrt(b**2 - 4*a*c)
     return np.stack([(-b + sq) / (2*a) for sq in (sqrt, -sqrt)])
 
-def calc_poly(coefs: np.array, t: np.array) -> complex:
+def calc_poly(coefs: npt.NDArray, t: npt.NDArray) -> complex:
     """Polynomial for the Euler's formula exponent"""
     # Combine arrays in a shape [coefs.shape, t.shape]
     poly_rank = coefs.shape[-1]
@@ -22,7 +24,8 @@ def calc_poly(coefs: np.array, t: np.array) -> complex:
     # Final result in a shape of [coefs.shape[:-1], t.shape]
     return (coefs * t).sum(-t.ndim)
 
-def calc_euler_derivs(num: int, euler_omega: np.array, euler_phi: np.array, t: np.array) -> np.array:
+def calc_euler_derivs(num: int, euler_omega: npt.NDArray, euler_phi: npt.NDArray,
+                      t: npt.NDArray) -> npt.NDArray:
     """Euler's formula from complex frequency and phase"""
     euler_omega = np.asarray(euler_omega)
     t = np.asarray(t)
@@ -32,7 +35,8 @@ def calc_euler_derivs(num: int, euler_omega: np.array, euler_phi: np.array, t: n
     mult = mult.reshape(mult.shape + (1,)*t.ndim)
     return mult * exp
 
-def calc_rlc_fn_derivs(num: int, euler_omega: np.array, euler_phi: np.array, t: np.array) -> np.array:
+def calc_rlc_fn_derivs(num: int, euler_omega: npt.NDArray, euler_phi: npt.NDArray,
+                       t: npt.NDArray) -> npt.NDArray:
     """RLC function: sum of Euler's formulas"""
     t = np.asarray(t)
     res = calc_euler_derivs(num, euler_omega, euler_phi, t)
@@ -40,7 +44,8 @@ def calc_rlc_fn_derivs(num: int, euler_omega: np.array, euler_phi: np.array, t: 
     # Result shape [1<num>, omega.shape[:-1], t.shape]
     return res.sum(-1-t.ndim)
 
-def calc_rlc_fn2_derivs(num: int, euler_omega: np.array, euler_phi: np.array, t: np.array) -> np.array:
+def calc_rlc_fn2_derivs(num: int, euler_omega: npt.NDArray, euler_phi: npt.NDArray,
+                        t: npt.NDArray) -> npt.NDArray:
     """RLC function for critically damped system: (t+1)*e^(omega*t)"""
     euler_omega = np.asarray(euler_omega)
     t = np.asarray(t)

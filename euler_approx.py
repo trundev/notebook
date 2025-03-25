@@ -10,11 +10,15 @@ DEF_NUM_DERIVS = 4
 DEF_EXTRA_DERIVS = 2
 DEF_MAX_HISTORY = 8
 
+T_Time = float
+T_Value = float
+
 class deriv_approx(poly_approx.approximator):
     """Approximate complex exponent function by using its real value only"""
-    max_rank = None
-    num_derivs = None
-    derivs = None
+    max_rank: int
+    num_derivs: int
+    derivs: dict[T_Time, list[T_Value]]
+    max_history: int | None
 
     def __init__(self, src=None):
         """Optional-copy constructor"""
@@ -28,9 +32,9 @@ class deriv_approx(poly_approx.approximator):
         self.max_history = max_history
         self.derivs = {}
 
-    def approximate(self, val, time):
+    def approximate(self, val0, time0):
         """Feed approximation data"""
-        super().approximate(val, time)
+        super().approximate(val0, time0)
         super().reduce(max_rank=self.max_rank)
         tmp_obj = self.copy()
         d_idx = min(self.num_derivs, tmp_obj.num_deltas()) - 1
